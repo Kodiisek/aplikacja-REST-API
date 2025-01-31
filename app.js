@@ -1,22 +1,13 @@
 const express = require('express');
 const logger = require('morgan');
 const cors = require('cors');
-const mongoose = require('mongoose');
+const connectDB = require('./config/db');
 
 const contactsRouter = require('./routes/api/contacts');
 
 const app = express();
 
-const mongoURI = "mongodb+srv://KonradT:mCMRcxJNTYREzHvW@cluster0.jredo.mongodb.net/db-contacts?retryWrites=true&w=majority";
-
-mongoose.connect(mongoURI)
-  .then(() => {
-    console.log('Database connection successful');
-  })
-  .catch(err => {
-    console.error('Błąd połączenia z MongoDB:', err);
-    process.exit(1); // Kończy proces w przypadku błędu połączenia
-  });
+connectDB();
 
 const formatsLogger = app.get('env') === 'development' ? 'dev' : 'short';
 
@@ -35,4 +26,3 @@ app.use((err, req, res, next) => {
 });
 
 module.exports = app;
-
