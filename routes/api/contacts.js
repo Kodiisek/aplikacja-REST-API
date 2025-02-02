@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const checkToken = require('../../checkToken/checkToken');
 const contacts = require('../../models/contacts');
 
-router.get('/', async (req, res) => {
+router.get('/', checkToken, async (req, res) => {
   try {
     const allContacts = await contacts.listContacts();
     res.status(200).json(allContacts);
@@ -11,7 +12,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', checkToken, async (req, res) => {
   const { id } = req.params;
   try {
     const contact = await contacts.getById(id);
@@ -24,7 +25,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', checkToken, async (req, res) => {
   const { name, email, phone } = req.body;
   if (!name || !email || !phone) {
     return res.status(400).json({
@@ -40,7 +41,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', checkToken, async (req, res) => {
   const { id } = req.params;
   try {
     const deletedContact = await contacts.removeContact(id);
@@ -53,7 +54,7 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', checkToken, async (req, res) => {
   const { id } = req.params;
   const { name, email, phone } = req.body;
   if (!name && !email && !phone) {
@@ -71,7 +72,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.patch('/:contactId/favorite', async (req, res) => {
+router.patch('/:contactId/favorite', checkToken, async (req, res) => {
   const { contactId } = req.params;
   const { favorite } = req.body;
 
