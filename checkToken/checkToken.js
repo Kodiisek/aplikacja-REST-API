@@ -16,7 +16,7 @@ const checkToken = async (req, res, next) => {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
-    req.user = user;  // Zapisz dane użytkownika w req.user
+    req.user = user;  
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Not authorized' });
