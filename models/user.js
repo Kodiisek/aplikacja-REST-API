@@ -27,6 +27,17 @@ const userSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: "user",
   },
+  verify: {
+    type: Boolean,
+    default: false,
+  },
+  verificationToken: {
+    type: String,
+    required: function() {
+      return !this.verify;
+    },
+  },
+  
 });
 
 const User = model("user", userSchema);
