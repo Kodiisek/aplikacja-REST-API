@@ -8,19 +8,41 @@ const jimp = require("jimp");
 const path = require("path");
 const fs = require("fs");
 const Users = require("../../models/user");
+const sendVerificationEmail = require("../../emailAuth/sgMail");
+const { v4: uuidv4 } = require("uuid");
 
 const router = express.Router();
 
 const SECRET_KEY = process.env.JWT_SECRET;
 
-const upload = multer({
-  dest: "tmp/",
-  limits: { fileSize: 5 * 250 * 250 },
-});
+const checkToken = (req, res, next) => {
+  const token = req.header("Authorization")?.replace("Bearer ", "");
+  if (!token) {
+    return res.status(401).json({ message: "Not authorized" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, SECRET_KEY);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Not authorized" });
+  }
+};
 
 const signupSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
+});
+
+const loginSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).required(),
+});
+
+const upload = multer({
+  dest: "tmp/",
+  limits: { fileSize: 5 * 250 * 250 },
 });
 
 router.post("/signup", async (req, res) => {
@@ -43,12 +65,19 @@ router.post("/signup", async (req, res) => {
       d: 'mm',
     });
 
+    const verificationToken = uuidv4();
+
     const newUser = await Users.create({ 
       email, 
       password: hashedPassword,
-      avatarURL, 
+      avatarURL,
+      verificationToken,
     });
 
+    await sendVerificationEmail(email, verificationToken);
+
+    console.log("Sending email to:", email);
+    
     res.status(201).json({
       user: {
         email: newUser.email,
@@ -61,10 +90,58 @@ router.post("/signup", async (req, res) => {
   }
 });
 
-const loginSchema = Joi.object({
-  email: Joi.string().email().required(),
-  password: Joi.string().min(6).required(),
+
+router.get("/verify/:verificationToken", async (req, res) => {
+  const { verificationToken } = req.params;
+
+  try {
+    const user = await Users.findOne({ verificationToken });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    user.verify = true;
+    user.verificationToken = null;
+    await user.save();
+
+    res.status(200).json({ message: "Verification successful" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
 });
+
+router.post("/verify", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: "missing required field email" });
+  }
+
+  try {
+    const user = await Users.findOne({ email });
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.verify) {
+      return res.status(400).json({ message: "Verification has already been passed" });
+    }
+
+    const verificationToken = uuidv4();
+    user.verificationToken = verificationToken;
+    await user.save();
+
+    await sendVerificationEmail(user.email);
+
+    res.status(200).json({ message: "Verification email sent" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 
 router.post("/login", async (req, res) => {
   try {
@@ -77,6 +154,10 @@ router.post("/login", async (req, res) => {
     const user = await Users.findOne({ email });
     if (!user) {
       return res.status(401).json({ message: "Email or password is wrong" });
+    }
+
+    if (!user.verify) {
+      return res.status(401).json({ message: "Email not verified" });
     }
 
     const passwordMatch = await bcrypt.compare(password, user.password);
@@ -99,21 +180,6 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
-const checkToken = (req, res, next) => {
-  const token = req.header("Authorization")?.replace("Bearer ", "");
-  if (!token) {
-    return res.status(401).json({ message: "Not authorized" });
-  }
-
-  try {
-    const decoded = jwt.verify(token, SECRET_KEY);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    return res.status(401).json({ message: "Not authorized" });
-  }
-};
 
 router.get("/current", checkToken, async (req, res) => {
   try {
@@ -166,6 +232,22 @@ router.patch("/avatars", checkToken, upload.single("avatar"), async (req, res) =
     }
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+router.post("/send-email", async (req, res) => {
+  try {
+    const { to, subject, text, html } = req.body;
+
+    if (!to || !subject || !text || !html) {
+      return res.status(400).json({ message: "Missing required email fields" });
+    }
+
+    await sendEmail({ to, subject, text, html });
+
+    res.status(200).json({ message: "Email sent successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Error sending email", error });
   }
 });
 
